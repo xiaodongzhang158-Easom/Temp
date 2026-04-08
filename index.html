@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>贪吃蛇</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f172a;
+      --panel: #111827;
+      --grid: #1f2937;
+      --snake: #22c55e;
+      --food: #ef4444;
+      --text: #e5e7eb;
+      --accent: #38bdf8;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: radial-gradient(circle at 20% 20%, #1e293b, var(--bg));
+      color: var(--text);
+      padding: 20px;
+    }
+
+    .game-wrap {
+      width: min(92vw, 560px);
+      background: rgba(17, 24, 39, 0.88);
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+      backdrop-filter: blur(8px);
+    }
+
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .stats {
+      display: flex;
+      gap: 10px;
+      font-size: 0.95rem;
+      color: #cbd5e1;
+    }
+
+    .pill {
+      background: #0b1220;
+      border: 1px solid #2b3648;
+      border-radius: 999px;
+      padding: 6px 10px;
+    }
+
+    canvas {
+      width: 100%;
+      aspect-ratio: 1;
+      display: block;
+      background: repeating-linear-gradient(
+        0deg,
+        var(--grid) 0 24px,
+        #162032 24px 25px
+      ),
+      repeating-linear-gradient(
+        90deg,
+        transparent 0 24px,
+        #162032 24px 25px
+      );
+      border-radius: 12px;
+      border: 1px solid #334155;
+    }
+
+    .actions {
+      margin-top: 12px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      background: #0b1220;
+      border: 1px solid #2b3648;
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 0.95rem;
+      padding: 8px 14px;
+      cursor: pointer;
+      transition: 120ms ease;
+    }
+
+    button:hover { border-color: var(--accent); }
+    button:active { transform: translateY(1px); }
+
+    .hint {
+      margin-top: 10px;
+      color: #93a4bc;
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    .over {
+      color: #fca5a5;
+      font-weight: 600;
+    }
+
+    .controls {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(56px, 1fr));
+      gap: 8px;
+      max-width: 280px;
+    }
+
+    .controls .empty {
+      visibility: hidden;
+    }
+
+    .controls button {
+      min-height: 42px;
+      font-size: 1rem;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <main class="game-wrap">
+    <section class="top">
+      <h1>🐍 贪吃蛇</h1>
+      <div class="stats">
+        <div class="pill">分数：<span id="score">0</span></div>
+        <div class="pill">最高分：<span id="best">0</span></div>
+      </div>
+    </section>
+
+    <canvas id="board" width="500" height="500" aria-label="贪吃蛇游戏画布"></canvas>
+
+    <section class="actions">
+      <button id="startBtn" type="button">开始 / 暂停（空格）</button>
+      <button id="resetBtn" type="button">重新开始</button>
+    </section>
+
+    <section class="controls" aria-label="移动控制按钮">
+      <span class="empty" aria-hidden="true"></span>
+      <button type="button" data-dir="up">↑</button>
+      <span class="empty" aria-hidden="true"></span>
+      <button type="button" data-dir="left">←</button>
+      <button type="button" data-dir="down">↓</button>
+      <button type="button" data-dir="right">→</button>
+    </section>
+
+    <p class="hint" id="hint">方向键或 WASD 控制移动，撞墙或撞到自己即失败。</p>
+  </main>
+
+  <script>
+    const CELL = 25;
+    const GRID = 20;
+    const TICK = 120;
+
+    const board = document.getElementById('board');
+    const ctx = board.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const bestEl = document.getElementById('best');
+    const hintEl = document.getElementById('hint');
+    const startBtn = document.getElementById('startBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const controlButtons = document.querySelectorAll('[data-dir]');
+
+    let snake = [];
+    let dir = { x: 1, y: 0 };
+    let nextDir = { x: 1, y: 0 };
+    let food = { x: 10, y: 10 };
+    let score = 0;
+    let best = Number(localStorage.getItem('snake_best') || 0);
+    let running = false;
+    let loopId = null;
+
+    bestEl.textContent = String(best);
+
+    function initGame() {
+      snake = [
+        { x: 6, y: 10 },
+        { x: 5, y: 10 },
+        { x: 4, y: 10 }
+      ];
+      dir = { x: 1, y: 0 };
+      nextDir = { x: 1, y: 0 };
+      score = 0;
+      scoreEl.textContent = '0';
+      hintEl.classList.remove('over');
+      hintEl.textContent = '方向键或 WASD 控制移动，撞墙或撞到自己即失败。';
+      placeFood();
+      draw();
+    }
+
+    function placeFood() {
+      let x;
+      let y;
+      do {
+        x = Math.floor(Math.random() * GRID);
+        y = Math.floor(Math.random() * GRID);
+      } while (snake.some((seg) => seg.x === x && seg.y === y));
+      food = { x, y };
+    }
+
+    function tick() {
+      dir = nextDir;
+      const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+      const willGrow = head.x === food.x && head.y === food.y;
+
+      const hitWall = head.x < 0 || head.x >= GRID || head.y < 0 || head.y >= GRID;
+      const bodyForCollision = willGrow ? snake : snake.slice(0, -1);
+      const hitSelf = bodyForCollision.some((seg) => seg.x === head.x && seg.y === head.y);
+
+      if (hitWall || hitSelf) {
+        gameOver();
+        return;
+      }
+
+      snake.unshift(head);
+
+      if (willGrow) {
+        score += 1;
+        scoreEl.textContent = String(score);
+        if (score > best) {
+          best = score;
+          bestEl.textContent = String(best);
+          localStorage.setItem('snake_best', String(best));
+        }
+        placeFood();
+      } else {
+        snake.pop();
+      }
+
+      draw();
+    }
+
+    function drawCell(x, y, color) {
+      ctx.fillStyle = color;
+      ctx.fillRect(x * CELL + 1, y * CELL + 1, CELL - 2, CELL - 2);
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, board.width, board.height);
+
+      drawCell(food.x, food.y, '#ef4444');
+      snake.forEach((seg, i) => {
+        drawCell(seg.x, seg.y, i === 0 ? '#4ade80' : '#22c55e');
+      });
+    }
+
+    function start() {
+      if (running) return;
+      running = true;
+      loopId = setInterval(tick, TICK);
+      hintEl.classList.remove('over');
+      hintEl.textContent = '游戏进行中…';
+    }
+
+    function pause() {
+      running = false;
+      clearInterval(loopId);
+      loopId = null;
+      hintEl.textContent = '已暂停，按空格继续。';
+    }
+
+    function toggleStartPause() {
+      if (running) {
+        pause();
+      } else {
+        start();
+      }
+    }
+
+    function gameOver() {
+      pause();
+      hintEl.classList.add('over');
+      hintEl.textContent = `游戏结束！本局得分 ${score}，按“重新开始”再来一局。`;
+    }
+
+    function setDirection(x, y) {
+      if (x === -dir.x && y === -dir.y) return;
+      nextDir = { x, y };
+    }
+
+    window.addEventListener('keydown', (e) => {
+      const k = e.key.toLowerCase();
+      if (k === 'arrowup' || k === 'w') setDirection(0, -1);
+      if (k === 'arrowdown' || k === 's') setDirection(0, 1);
+      if (k === 'arrowleft' || k === 'a') setDirection(-1, 0);
+      if (k === 'arrowright' || k === 'd') setDirection(1, 0);
+      if (k === ' ') {
+        e.preventDefault();
+        toggleStartPause();
+      }
+    });
+
+    startBtn.addEventListener('click', toggleStartPause);
+    resetBtn.addEventListener('click', () => {
+      pause();
+      initGame();
+    });
+    controlButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const dirMap = {
+          up: [0, -1],
+          down: [0, 1],
+          left: [-1, 0],
+          right: [1, 0]
+        };
+        const [x, y] = dirMap[btn.dataset.dir];
+        setDirection(x, y);
+      });
+    });
+
+    initGame();
+  </script>
+</body>
+</html>
