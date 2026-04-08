@@ -119,6 +119,24 @@
       color: #fca5a5;
       font-weight: 600;
     }
+
+    .controls {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(56px, 1fr));
+      gap: 8px;
+      max-width: 280px;
+    }
+
+    .controls .empty {
+      visibility: hidden;
+    }
+
+    .controls button {
+      min-height: 42px;
+      font-size: 1rem;
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
@@ -138,6 +156,15 @@
       <button id="resetBtn" type="button">重新开始</button>
     </section>
 
+    <section class="controls" aria-label="移动控制按钮">
+      <span class="empty" aria-hidden="true"></span>
+      <button type="button" data-dir="up">↑</button>
+      <span class="empty" aria-hidden="true"></span>
+      <button type="button" data-dir="left">←</button>
+      <button type="button" data-dir="down">↓</button>
+      <button type="button" data-dir="right">→</button>
+    </section>
+
     <p class="hint" id="hint">方向键或 WASD 控制移动，撞墙或撞到自己即失败。</p>
   </main>
 
@@ -153,6 +180,7 @@
     const hintEl = document.getElementById('hint');
     const startBtn = document.getElementById('startBtn');
     const resetBtn = document.getElementById('resetBtn');
+    const controlButtons = document.querySelectorAll('[data-dir]');
 
     let snake = [];
     let dir = { x: 1, y: 0 };
@@ -194,9 +222,11 @@
     function tick() {
       dir = nextDir;
       const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+      const willGrow = head.x === food.x && head.y === food.y;
 
       const hitWall = head.x < 0 || head.x >= GRID || head.y < 0 || head.y >= GRID;
-      const hitSelf = snake.some((seg) => seg.x === head.x && seg.y === head.y);
+      const bodyForCollision = willGrow ? snake : snake.slice(0, -1);
+      const hitSelf = bodyForCollision.some((seg) => seg.x === head.x && seg.y === head.y);
 
       if (hitWall || hitSelf) {
         gameOver();
@@ -205,7 +235,7 @@
 
       snake.unshift(head);
 
-      if (head.x === food.x && head.y === food.y) {
+      if (willGrow) {
         score += 1;
         scoreEl.textContent = String(score);
         if (score > best) {
@@ -285,6 +315,18 @@
     resetBtn.addEventListener('click', () => {
       pause();
       initGame();
+    });
+    controlButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const dirMap = {
+          up: [0, -1],
+          down: [0, 1],
+          left: [-1, 0],
+          right: [1, 0]
+        };
+        const [x, y] = dirMap[btn.dataset.dir];
+        setDirection(x, y);
+      });
     });
 
     initGame();
